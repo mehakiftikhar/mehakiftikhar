@@ -1,5 +1,3 @@
-# 📁 File: agentic_form_collector.py
-
 import streamlit as st
 import fitz  # PyMuPDF
 import easyocr
@@ -11,7 +9,7 @@ import re
 # --- Streamlit UI setup ---
 st.set_page_config(page_title="Agentic Form Field Collector", layout="centered")
 st.title("🤖📄 Agentic Form Field Collector")
-st.markdown("Upload a form (PDF — scanned or text-based). Agent will extract fillable fields and prompt you to complete them.")
+st.markdown("Upload a form (PDF - scanned or text-based). Agent will extract fillable fields and prompt you to complete them.")
 
 # --- File uploader ---
 pdf_file = st.file_uploader("📤 Upload your form (PDF only)", type=["pdf"])
@@ -43,7 +41,7 @@ def extract_text_ocr_all_pages(path):
             text += f"\n\n--- Page {page_index + 1} Image {img_index + 1} ---\n" + "\n".join(result)
     return text.strip()
 
-# --- Extract fillable logical fields ---
+# --- Improved Extract fillable logical fields ---
 def extract_fields(text):
     allowed_keywords = [
         "name", "dob", "birth", "date", "address", "email", "phone", 
@@ -62,7 +60,9 @@ def extract_fields(text):
             if any(ok in line for ok in allowed_keywords):
                 match = re.split(r'[:\-]', line)[0].strip().title()
                 if 2 < len(match) < 40 and match not in fields:
-                    fields.append(match)
+                    # Ensure field contains at least one alphabet character
+                    if any(c.isalpha() for c in match):
+                        fields.append(match)
 
     return fields
 
