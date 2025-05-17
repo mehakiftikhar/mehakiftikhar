@@ -17,6 +17,22 @@ pdf_file = st.file_uploader("📤 Upload your form (PDF only)", type=["pdf"])
 # --- EasyOCR reader ---
 reader = easyocr.Reader(['en'], gpu=False)
 
+# --- Extract form fields directly from fillable PDF ---
+def extract_form_fields_from_pdf(path):
+    doc = fitz.open(path)
+    fields = []
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+        widgets = page.widgets()  # form fields on this page
+        if widgets:
+            for w in widgets:
+                field_name = w.field_name
+                if field_name and field_name.lower() not in ['submit', 'reset']:
+                    cleaned = field_name.strip().title()
+                    if cleaned not in fields:
+                        fields.append(cleaned)
+    return fields
+
 # --- Text-based PDF reader ---
 def extract_text_pymupdf_all_pages(path):
     doc = fitz.open(path)
@@ -41,11 +57,11 @@ def extract_text_ocr_all_pages(path):
             text += f"\n\n--- Page {page_index + 1} Image {img_index + 1} ---\n" + "\n".join(result)
     return text.strip()
 
-# --- Improved Extract fillable logical fields ---
+# --- Extract fillable logical fields from text ---
 def extract_fields(text):
     allowed_keywords = [
-        "name", "dob", "birth", "date", "address", "email", "phone", 
-        "mobile", "number", "cnic", "id", "gender", "nationality", 
+        "name", "dob", "birth", "date", "address", "email", "phone",
+        "mobile", "number", "cnic", "id", "gender", "nationality",
         "city", "father", "mother", "guardian", "occupation", "religion"
     ]
     banned_keywords = ["page", "info", "section", "form", "table", "instructions", "code"]
@@ -60,10 +76,8 @@ def extract_fields(text):
             if any(ok in line for ok in allowed_keywords):
                 match = re.split(r'[:\-]', line)[0].strip().title()
                 if 2 < len(match) < 40 and match not in fields:
-                    # Ensure field contains at least one alphabet character
                     if any(c.isalpha() for c in match):
                         fields.append(match)
-
     return fields
 
 # --- Main Logic ---
@@ -71,38 +85,43 @@ if pdf_file is not None:
     with open("temp.pdf", "wb") as f:
         f.write(pdf_file.read())
 
-    with st.spinner("🔍 Reading form (multi-page)..."):
-        text = extract_text_pymupdf_all_pages("temp.pdf")
+    # 1. Try extracting fillable form fields directly
+    fields = extract_form_fields_from_pdf("temp.pdf")
 
-    if not text or len(text.strip()) < 50:
-        st.warning("⚠️ Not enough text found. Trying OCR on scanned images...")
-        with st.spinner("🧠 Performing OCR..."):
-            text = extract_text_ocr_all_pages("temp.pdf")
+    # 2. If no fields found, try text extraction
+    if not fields:
+        with st.spinner("🔍 Extracting text from PDF..."):
+            text = extract_text_pymupdf_all_pages("temp.pdf")
 
-    if not text:
-        st.error("❌ No readable text could be extracted from this file.")
+        # 3. If text is too little, try OCR
+        if not text or len(text.strip()) < 50:
+            st.warning("⚠️ Not enough text found. Trying OCR on scanned images...")
+            with st.spinner("🧠 Performing OCR..."):
+                text = extract_text_ocr_all_pages("temp.pdf")
+
+        # 4. Extract fields from text using keywords
+        if text:
+            fields = extract_fields(text)
+
+    if not fields:
+        st.warning("⚠️ No fillable fields detected in the document.")
     else:
-        fields = extract_fields(text)
+        st.success(f"✅ {len(fields)} fillable fields found!")
+        st.markdown("### ✍️ Please provide your information:")
 
-        if not fields:
-            st.warning("⚠️ No fillable fields like 'Name:', 'DOB:', etc. were found.")
-        else:
-            st.success(f"✅ {len(fields)} fillable fields found!")
-            st.markdown("### ✍️ Please provide your information:")
+        user_inputs = {}
+        for field in fields:
+            lower = field.lower()
+            if "date" in lower:
+                date = st.date_input(field)
+                user_inputs[field] = str(date)
+            elif "photo" in lower or "image" in lower:
+                image = st.file_uploader(f"{field} (Upload JPG/PNG)", type=["jpg", "jpeg", "png"])
+                user_inputs[field] = image.name if image else None
+            else:
+                text_input = st.text_input(f"{field}", placeholder=f"Enter your {field}")
+                user_inputs[field] = text_input
 
-            user_inputs = {}
-            for field in fields:
-                lower = field.lower()
-                if "date" in lower:
-                    date = st.date_input(field)
-                    user_inputs[field] = str(date)
-                elif "photo" in lower or "image" in lower:
-                    image = st.file_uploader(f"{field} (Upload JPG/PNG)", type=["jpg", "jpeg", "png"])
-                    user_inputs[field] = image.name if image else None
-                else:
-                    text_input = st.text_input(f"{field}", placeholder=f"Enter your {field}")
-                    user_inputs[field] = text_input
-
-            if st.button("📨 Submit Information"):
-                st.success("✅ Information collected successfully!")
-                st.json(user_inputs)
+        if st.button("📨 Submit Information"):
+            st.success("✅ Information collected successfully!")
+            st.json(user_inputs)
