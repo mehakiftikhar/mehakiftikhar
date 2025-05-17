@@ -58,22 +58,27 @@ def extract_text_ocr_all_pages(path):
     return text.strip()
 
 # --- Extract fillable logical fields from text ---
-def extract_fields(path):
-    doc = fitz.open(path)
-    fields = []
-    for page_num in range(len(doc)):
-        page = doc[page_num]
-        blocks = page.get_text("blocks")  # list of (x0,y0,x1,y1,text,...)
-        for block in blocks:
-            text = block[4].strip()
-            # Check if text looks like a label followed by underscores or empty space
-            # Example pattern: "Name: ________"
-            if re.search(r'[:\-]\s*[_\s]{3,}', text.lower()):
-                label = re.split(r'[:\-]', text)[0].strip().title()
-                if label not in fields:
-                    fields.append(label)
-    return fields
+def extract_fields(text):
+    allowed_keywords = [
+        "name", "dob", "birth", "date", "address", "email", "phone",
+        "mobile", "number", "cnic", "id", "gender", "nationality",
+        "city", "father", "mother", "guardian", "occupation", "religion"
+    ]
+    banned_keywords = ["page", "info", "section", "form", "table", "instructions", "code"]
 
+    lines = text.lower().split("\n")
+    fields = []
+
+    for line in lines:
+        if ":" in line or "-" in line:
+            if any(bad in line for bad in banned_keywords):
+                continue
+            if any(ok in line for ok in allowed_keywords):
+                match = re.split(r'[:\-]', line)[0].strip().title()
+                if 2 < len(match) < 40 and match not in fields:
+                    if any(c.isalpha() for c in match):
+                        fields.append(match)
+    return fields
 
 # --- Main Logic ---
 if pdf_file is not None:
