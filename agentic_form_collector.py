@@ -37,37 +37,18 @@ def extract_text_ocr_all_pages(path):
     return text.strip()
 
 def extract_fields(text):
-    allowed_keywords = [
-        "name", "dob", "birth", "date", "address", "email", "phone",
-        "mobile", "number", "cnic", "id", "gender", "nationality",
-        "father", "mother", "guardian", "contact", "city", "zip", "postal"
-    ]
-    banned_keywords = ["page", "info", "section", "form", "table", "instructions", "note", "title"]
-
-    lines = text.lower().split("\n")
+    lines = text.split("\n")
+    field_pattern = re.compile(r"([A-Za-z0-9\s\-_/]+)\s*[:\-–]\s*")
     fields = []
 
     for line in lines:
-        line = line.strip()
-        if not line or len(line) < 4 or len(line) > 60:
-            continue
+        matches = field_pattern.findall(line)
+        for match in matches:
+            cleaned = match.strip()
+            if 2 < len(cleaned) < 40:
+                fields.append(cleaned)
 
-        # Only accept if it ends with ':' or '-' (very common in forms)
-        if not (line.endswith(":") or line.endswith("-")):
-            continue
-
-        # Ignore if it includes banned keywords
-        if any(bad in line for bad in banned_keywords):
-            continue
-
-        # Accept if allowed keyword appears
-        if any(ok in line for ok in allowed_keywords):
-            match = re.split(r'[:\-]', line)[0].strip().title()
-            if match and len(match) > 2:
-                fields.append(match)
-
-    return sorted(set(fields))
-
+    return list(set(fields))
 
 # ---- Process PDF ----
 if pdf_file is not None:
