@@ -3,3 +3,5 @@ PyMuPDF
 pytesseract
 pdf2image
 pillow
+easyocr
+numpy
