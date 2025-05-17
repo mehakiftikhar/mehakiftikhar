@@ -1,85 +1,52 @@
-# agentic_form_collector.py
+# 📁 File: agentic_form_collector.py
 
 import streamlit as st
-import fitz               # PyMuPDF
-import pytesseract
-from pdf2image import convert_from_path
-from typing import List
+import fitz  # PyMuPDF
 
-st.set_page_config(page_title="Agentic Form Collector", layout="centered")
-st.title("🧾 Agentic Form Collector")
-st.markdown(
-    "Upload any form (fillable or scanned). "
-    "Our agent will detect missing fields and ask you to fill them."
-)
+st.set_page_config(page_title="Agentic Form Field Collector", layout="centered")
+st.title("🤖📄 Agentic Form Field Collector")
+st.markdown("Upload a form PDF and the agent will extract missing fields and ask you to fill them in.")
 
-# 1️⃣ Upload PDF
-uploaded = st.file_uploader("Upload your PDF form", type=["pdf"])
-if not uploaded:
-    st.stop()
+# ---- Step 1: Upload the form ----
+pdf_file = st.file_uploader("📤 Upload your form (PDF only)", type=["pdf"])
 
-# Save to a temp file
-with open("temp_form.pdf", "wb") as f:
-    f.write(uploaded.read())
-pdf_path = "temp_form.pdf"
-
-
-# 2️⃣ Extract fillable fields (AcroForm)
-def extract_fillable_fields(path: str) -> List[str]:
+def extract_fields_via_text(path):
+    """Extract field-like text (lines with ':') from the PDF."""
     doc = fitz.open(path)
-    names = []
-    for page in doc:
-        for widget in page.widgets() or []:
-            if widget.field_name:
-                names.append(widget.field_name.strip())
-    return list(dict.fromkeys(names))
-
-
-# 3️⃣ If no fillable fields, fallback to OCR text headings
-def extract_fields_via_ocr(path: str) -> List[str]:
-    # very basic heuristic: take each line as a potential field
-    pages = convert_from_path(path)
     text = ""
-    for img in pages:
-        text += pytesseract.image_to_string(img) + "\n"
-    # split lines, keep short ones as “fields”
-    candidates = [line.strip() for line in text.splitlines() if 3 < len(line) < 40]
-    # dedupe and return top 10
-    seen, fields = set(), []
-    for line in candidates:
-        if line not in seen:
-            seen.add(line)
-            fields.append(line)
-        if len(fields) >= 10:
-            break
-    return fields
+    for page in doc:
+        text += page.get_text()
+    lines = text.split("\n")
+    possible_fields = [line.strip().replace(":", "") for line in lines if ":" in line and 2 < len(line.strip()) < 40]
+    return list(set(possible_fields))
 
+# ---- Step 2: Extract fields ----
+if pdf_file is not None:
+    with open("temp.pdf", "wb") as f:
+        f.write(pdf_file.read())
 
-# gather fields
-fields = extract_fillable_fields(pdf_path)
-if not fields:
-    st.info("No interactive fields found; using OCR to detect labels…")
-    fields = extract_fields_via_ocr(pdf_path)
+    with st.spinner("🔍 Reading and analyzing the form..."):
+        fields = extract_fields_via_text("temp.pdf")
 
-st.markdown("**Detected fields:**  " + ", ".join(fields))
-
-# 4️⃣ Ask user to fill each detected field
-user_data = {}
-for field in fields:
-    lf = field.lower()
-    if "date" in lf:
-        val = st.date_input(field, key=field)
-        user_data[field] = str(val)
-    elif any(k in lf for k in ("photo", "image", "file")):
-        up = st.file_uploader(f"{field} (upload image)", type=["jpg","png","jpeg"], key=field)
-        user_data[field] = up
+    if not fields:
+        st.warning("⚠️ No field-like entries found in the form.")
     else:
-        user_data[field] = st.text_input(field, key=field)
+        st.success("✅ Fields extracted successfully!")
+        st.markdown("### ✍️ Please fill in the missing fields:")
 
-# 5️⃣ Submit and show collected data
-if st.button("📨 Submit Missing Info"):
-    st.success("✅ Collected the following information:")
-    st.json(user_data)
-    # Here you could call your PDF-filling function and pass `user_data`
-    # e.g. filled_path = fill_pdf("temp_form.pdf", "filled.pdf", user_data)
-    # and then st.download_button(...) for the filled result.
+        user_inputs = {}
+        for field in fields:
+            lower = field.lower()
+            if "date" in lower:
+                date = st.date_input(field)
+                user_inputs[field] = str(date)
+            elif "photo" in lower or "image" in lower:
+                image = st.file_uploader(f"{field} (Upload JPG/PNG)", type=["jpg", "jpeg", "png"])
+                user_inputs[field] = image.name if image else None
+            else:
+                text = st.text_input(f"{field}", placeholder=f"Enter your {field}")
+                user_inputs[field] = text
+
+        if st.button("📨 Submit Information"):
+            st.success("✅ Info Collected Successfully!")
+            st.json(user_inputs)
