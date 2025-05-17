@@ -1,5 +1,5 @@
 # 📁 File: agentic_form_collector.py
-
+import re
 import streamlit as st
 import fitz  # PyMuPDF
 
@@ -11,14 +11,26 @@ st.markdown("Upload a form PDF and the agent will extract missing fields and ask
 pdf_file = st.file_uploader("📤 Upload your form (PDF only)", type=["pdf"])
 
 def extract_fields_via_text(path):
-    """Extract field-like text (lines with ':') from the PDF."""
+    """Improved: Extract field-like labels from the PDF using PyMuPDF and regex."""
     doc = fitz.open(path)
     text = ""
     for page in doc:
         text += page.get_text()
+    
+    # Use regex to find lines like 'Name:', 'Address', 'Date of Birth:', etc.
     lines = text.split("\n")
-    possible_fields = [line.strip().replace(":", "") for line in lines if ":" in line and 2 < len(line.strip()) < 40]
-    return list(set(possible_fields))
+    field_pattern = re.compile(r"([A-Za-z0-9\s\-_/]+)\s*[:\-–]\s*")  # better field matching
+
+    fields = []
+    for line in lines:
+        matches = field_pattern.findall(line)
+        for match in matches:
+            cleaned = match.strip()
+            if 2 < len(cleaned) < 40:
+                fields.append(cleaned)
+
+    return list(set(fields))
+
 
 # ---- Step 2: Extract fields ----
 if pdf_file is not None:
