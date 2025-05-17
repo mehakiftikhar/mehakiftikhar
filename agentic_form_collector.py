@@ -37,16 +37,23 @@ def extract_text_ocr_all_pages(path):
     return text.strip()
 
 def extract_fields(text):
-    lines = text.split("\n")
-    field_pattern = re.compile(r"([A-Za-z0-9\s\-_/]+)\s*[:\-–]\s*")
+    allowed_keywords = [
+        "name", "dob", "birth", "date", "address", "email", "phone", 
+        "number", "cnic", "id", "gender", "nationality", "city", "father", "mother"
+    ]
+    banned_keywords = ["page", "info", "section", "form", "table", "instructions"]
+
+    lines = text.lower().split("\n")
     fields = []
 
     for line in lines:
-        matches = field_pattern.findall(line)
-        for match in matches:
-            cleaned = match.strip()
-            if 2 < len(cleaned) < 40:
-                fields.append(cleaned)
+        if ":" in line or "-" in line:
+            if any(bad in line for bad in banned_keywords):
+                continue
+            if any(ok in line for ok in allowed_keywords):
+                match = re.split(r'[:\-]', line)[0].strip().title()
+                if 2 < len(match) < 40:
+                    fields.append(match)
 
     return list(set(fields))
 
